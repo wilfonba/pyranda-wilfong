@@ -460,19 +460,37 @@ class pyrandaSim:
 
         self.vizDumpHistory.append( [self.cycle, self.time] )
 
-        # Write .visit file
+        # Write .visit file (VisIt time series).
         if self.PyMPI.master == 1:
-            vid = open( os.path.join(self.PyIO.rootname, 'pyranda.visit' ) , 'w')
-            vid.write("!NBLOCKS %s \n" % self.PyMPI.comm.Get_size() )
+            nprocs = self.PyMPI.comm.Get_size()
+            vid = open(os.path.join(self.PyIO.rootname, 'pyranda.visit'), 'w')
+            vid.write('!NBLOCKS %d\n' % nprocs)
             for vdump in self.vizDumpHistory:
-                iv = vdump[0]
-                vid.write("!TIME %s \n" % vdump[1] )  # DOES NOT WORK, EITHER.
-                for p in range(self.PyMPI.comm.Get_size()):
-                    vid.write("%s\n" % os.path.join('vis' + str(iv).zfill(visInt),
-                                                    'proc-%s.%s.%s' % (str(p).zfill(procInt),str(iv).zfill(visInt),suff ) ) )
+                iv = vdump[0]        # cycle
+                for p in range(nprocs):
+                    vid.write('%s\n' % os.path.join(
+                        'vis' + str(iv).zfill(visInt),
+                        'proc-%s.%s.vts' % (str(p).zfill(procInt),
+                                            str(iv).zfill(visInt))))
             vid.close()
-                    
-            
+
+        # Write .pvd collection file (ParaView time series).
+        if self.PyMPI.master == 1:
+            pvd = open(os.path.join(self.PyIO.rootname, 'pyranda.pvd'), 'w')
+            pvd.write('<?xml version="1.0"?>\n')
+            pvd.write('<VTKFile type="Collection" version="1.0" '
+                      'byte_order="LittleEndian">\n')
+            pvd.write('  <Collection>\n')
+            for vdump in self.vizDumpHistory:
+                iv = vdump[0]        # cycle
+                vt = vdump[1]        # time
+                pvts = os.path.join('vis' + str(iv).zfill(visInt),
+                                    'pyranda.%s.pvts' % str(iv).zfill(visInt))
+                pvd.write('    <DataSet timestep="%.17g" group="" part="0" '
+                          'file="%s"/>\n' % (float(vt), pvts))
+            pvd.write('  </Collection>\n')
+            pvd.write('</VTKFile>\n')
+            pvd.close()
 
 
     def writeRestart(self,ivars=None,suffix=None,wVars=[]):

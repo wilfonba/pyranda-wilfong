@@ -9,7 +9,7 @@
 # Written by: Britton J. Olson, olson45@llnl.gov
 ################################################################################
 import os
-import numpy 
+import numpy
 import struct
 
 
@@ -17,23 +17,23 @@ class pyrandaIO:
     """
     Class to handle IO of pyranda objects and files
     """
-    
+
     def __init__(self,rootname,pympi):
-        
+
         self.rootname = rootname
         self.PyMPI = pympi
         self.ioformat = "BINARY" # "BINARY" or "ASCII" only
         self.variables = []  # List of variables to be included
-        
+
         if self.PyMPI.master == 1:
             try:
                 os.mkdir(rootname)
             except:
                 pass
         self.PyMPI.comm.barrier()   # Wait for directory to be made
-            
+
     def makeDump(self,data,dumpName):
-        
+
         dumpFile = dumpName
         if self.PyMPI.master == 1:
             try:
@@ -45,7 +45,7 @@ class pyrandaIO:
         file_name = os.path.join( self.rootname, dumpFile, 'p' + str(rank).zfill(8) )
 
 
-        fd = open(file_name, 'wb')            
+        fd = open(file_name, 'wb')
         #fwrite(fd, data.size, data)
         data.tofile(fd)
         fd.close()
@@ -55,187 +55,240 @@ class pyrandaIO:
         if self.ioformat == "BINARY":
             self.makeDumpVTKbin(mesh,variables,varList,dumpFile,cycle,time)
         elif self.ioformat == "ASCII":
-            self.makeDumpVTKascii(mesh,variables,varList,dumpFile,cycle,time)                
-        
-    def makeDumpVTKascii(self,mesh,variables,varList,dumpFile,cycle,time):
+            self.makeDumpVTKascii(mesh,variables,varList,dumpFile,cycle,time)
 
-        ghost = True
 
-        if ghost:
-            fx = self.PyMPI.ghost(mesh.coords[0].data[:,:,:] )
-            fy = self.PyMPI.ghost(mesh.coords[1].data[:,:,:] )
-            fz = self.PyMPI.ghost(mesh.coords[2].data[:,:,:] )
-        else:
-            fx = mesh.coords[0].data[:,:,:]
-            fy = mesh.coords[1].data[:,:,:]
-            fz = mesh.coords[2].data[:,:,:]
+    def makeDumpVTKascii(self, mesh, variables, varList, dumpFile, cycle, time):
 
-        ax = fx.shape[0]
-        ay = fx.shape[1]
-        az = fx.shape[2]
+        nn = (self.PyMPI.nx, self.PyMPI.ny, self.PyMPI.nz)   # global point counts
 
-        fid = open(dumpFile + '.vtk','w')
+        fx = self.PyMPI.ghost(mesh.coords[0].data[:, :, :])
+        fy = self.PyMPI.ghost(mesh.coords[1].data[:, :, :])
+        fz = self.PyMPI.ghost(mesh.coords[2].data[:, :, :])
 
-        fid.write("# vtk DataFile Version 3.0 \n")
-        fid.write("vtk output \n")
-        fid.write("ASCII \n")
-        fid.write("DATASET STRUCTURED_GRID \n")
+        lo = self.PyMPI.chunk_3d_lo
+        hi = self.PyMPI.chunk_3d_hi
 
-        # For ASCII vtk, this gives proper time stamps
-        fid.write("FIELD FieldData 2 \n")
-        fid.write("CYCLE 1 1 int \n")
-        fid.write("%d \n" % cycle )
-        fid.write("TIME 1 1 double \n")
-        fid.write("%s \n" % time )
-        
-        fid.write("DIMENSIONS  %s %s %s  \n" % (ax,ay,az))
-        fid.write("POINTS %s float  \n" % (ax*ay*az))
+        start  = [0, 0, 0]
+        ext_lo = [0, 0, 0]
+        ext_hi = [0, 0, 0]
+        for d in range(3):
+            has_lo_ghost = (nn[d] > 1) and (lo[d] > 0)
+            start[d]  = 1 if has_lo_ghost else 0
+            ext_lo[d] = int(lo[d])
+            ext_hi[d] = int(hi[d]) + (1 if (nn[d] > 1 and hi[d] < nn[d] - 1) else 0)
 
-        for k in range(az):
-            for j in range(ay):
-                for i in range(ax):
-                    fid.write("%s " % fx[i,j,k])
-                    fid.write("%s " % fy[i,j,k])
-                    fid.write("%s " % fz[i,j,k])
+        sl = tuple(slice(start[d], start[d] + (ext_hi[d] - ext_lo[d] + 1))
+                   for d in range(3))
+        fx = fx[sl]; fy = fy[sl]; fz = fz[sl]
 
-        fid.write("\nPOINT_DATA %s  " % (ax*ay*az) )
+        fx, fy, fz, whole, pext, order = self._normalize2D(fx, fy, fz, nn, ext_lo, ext_hi)
 
-        
+        def fmt(arr):
+            # i (x) fastest, then j, then k == Fortran-order flatten
+            return ' '.join('%.17g' % v for v in numpy.asarray(arr).ravel(order='F'))
+
+        def fmt_points(ax, ay, az):
+            # interleaved x y z per point, i fastest
+            xf = numpy.asarray(ax).ravel(order='F')
+            yf = numpy.asarray(ay).ravel(order='F')
+            zf = numpy.asarray(az).ravel(order='F')
+            inter = numpy.empty(xf.size * 3, dtype=numpy.float64)
+            inter[0::3] = xf; inter[1::3] = yf; inter[2::3] = zf
+            return ' '.join('%.17g' % v for v in inter)
+
+        scal = varList[0] if varList else ''
+
+        # this rank's .vts piece
+        pieceFile = dumpFile + '.vts'
+        fid = open(pieceFile, 'w')
+        fid.write('<?xml version="1.0"?>\n')
+        fid.write('<VTKFile type="StructuredGrid" version="1.0" '
+                  'byte_order="LittleEndian">\n')
+        fid.write('  <StructuredGrid WholeExtent="%d %d %d %d %d %d">\n' % pext)
+        fid.write('    <FieldData>\n')
+        fid.write('      <DataArray type="Int32" Name="CYCLE" NumberOfTuples="1" '
+                  'format="ascii">%d</DataArray>\n' % cycle)
+        fid.write('      <DataArray type="Float64" Name="TIME" NumberOfTuples="1" '
+                  'format="ascii">%.17g</DataArray>\n' % float(time))
+        fid.write('    </FieldData>\n')
+        fid.write('    <Piece Extent="%d %d %d %d %d %d">\n' % pext)
+        fid.write('      <PointData Scalars="%s">\n' % scal)
         for var in varList:
-            fid.write("\nSCALARS %s float \n" % var)
-            fid.write("LOOKUP_TABLE default \n")
-            if ghost:
-                gdata = self.PyMPI.ghost( variables[var].data )
-            else:
-                gdata = variables[var].data
-            fid = open(dumpFile + '.vtk','a')
-            for k in range(az):
-                for j in range(ay):
-                    for i in range(ax):     
-                        fid.write("%s " % gdata[i,j,k] )
-                        
+            gdata = self.PyMPI.ghost(variables[var].data)[sl]
+            gdata = numpy.transpose(gdata, order)
+            fid.write('        <DataArray type="Float64" Name="%s" '
+                      'format="ascii">%s</DataArray>\n' % (var, fmt(gdata)))
+        fid.write('      </PointData>\n')
+        fid.write('      <Points>\n')
+        fid.write('        <DataArray type="Float64" NumberOfComponents="3" '
+                  'format="ascii">%s</DataArray>\n' % fmt_points(fx, fy, fz))
+        fid.write('      </Points>\n')
+        fid.write('    </Piece>\n')
+        fid.write('  </StructuredGrid>\n')
+        fid.write('</VTKFile>\n')
         fid.close()
 
+        self._writePVTS(pieceFile, dumpFile, whole, pext, varList, cycle, time,
+                        pointType='Float64', scalarType='Float64')
 
-    def makeDumpVTKbin(self,mesh,variables,varList,dumpFile,cycle,time,make2d=True):
 
-        ghost = True
+    def makeDumpVTKbin(self, mesh, variables, varList, dumpFile, cycle, time, make2d=True):
 
-        if ghost:
-            fx = self.PyMPI.ghost(mesh.coords[0].data[:,:,:] )
-            fy = self.PyMPI.ghost(mesh.coords[1].data[:,:,:] )
-            fz = self.PyMPI.ghost(mesh.coords[2].data[:,:,:] )
-        else:
-            fx = mesh.coords[0].data[:,:,:]
-            fy = mesh.coords[1].data[:,:,:]
-            fz = mesh.coords[2].data[:,:,:]
+        nn = (self.PyMPI.nx, self.PyMPI.ny, self.PyMPI.nz)
 
-        ax = fx.shape[0]
-        ay = fx.shape[1]
-        az = fx.shape[2]
+        fx = self.PyMPI.ghost(mesh.coords[0].data[:, :, :])
+        fy = self.PyMPI.ghost(mesh.coords[1].data[:, :, :])
+        fz = self.PyMPI.ghost(mesh.coords[2].data[:, :, :])
 
-        # Make2d option - for simulations with only 2 dimensional data, force them to be in first/second dimension
-        #  Only valid when az > 1 and either ax==1 or ay==1
-        reshape = None
-        if make2d and (az > 1 ) and ( (ax==1) or (ay==1) ):
-            if (ax == 1):
-                ax = ay
-                ay = az
-                az = 1
-                fx[:,:,:] = fy
-                fy[:,:,:] = fz
-                fz[:,:,:] = 0.0                
-            elif (ay == 1):
-                ay = az
-                az = 1
-                fy[:,:,:] = fz
-                fz[:,:,:] = 0.0
-                    
-            # 2D dataset always looks like this
-            reshape = (ax,ay,1)
+        lo = self.PyMPI.chunk_3d_lo
+        hi = self.PyMPI.chunk_3d_hi
+        start  = [0, 0, 0]; ext_lo = [0, 0, 0]; ext_hi = [0, 0, 0]
+        for d in range(3):
+            has_lo_ghost = (nn[d] > 1) and (lo[d] > 0)
+            start[d]  = 1 if has_lo_ghost else 0
+            ext_lo[d] = int(lo[d])
+            ext_hi[d] = int(hi[d]) + (1 if (nn[d] > 1 and hi[d] < nn[d] - 1) else 0)
+        sl = tuple(slice(start[d], start[d] + (ext_hi[d] - ext_lo[d] + 1))
+                   for d in range(3))
+        fx = fx[sl]; fy = fy[sl]; fz = fz[sl]
 
-            # Reshape mesh
-            fx = fx.reshape( reshape, order='F' )
-            fy = fy.reshape( reshape, order='F' )
-            fz = fz.reshape( reshape, order='F' )
+        fx, fy, fz, whole, pext, order = self._normalize2D(fx, fy, fz, nn, ext_lo, ext_hi)
 
-        # For nz == 1, check for z value an make it zero for viz
-        if ( az == 1  and (fz.max()==fz.min())):
-            fz[:,:,:] = 0.0
-                        
-        fid = open(dumpFile + '.vtk','w')
+        POINT_T  = '<f4'   # Float32 geometry
+        SCALAR_T = '<f4'   # Float32 fields
+        ptype = 'Float32' if POINT_T  == '<f4' else 'Float64'
+        stype = 'Float32' if SCALAR_T == '<f4' else 'Float64'
+        scal  = varList[0] if varList else ''
 
-        fid.write("# vtk DataFile Version 3.0 \n")
-        fid.write("vtk output \n")
-        fid.write("BINARY \n")
-        fid.write("DATASET STRUCTURED_GRID \n")    
-        fid.write("DIMENSIONS  %s %s %s  \n" % (ax,ay,az))
+        # Assemble appended raw blobs in write order, tracking byte offsets.
+        # Each entry in the AppendedData section is: [UInt64 nbytes header][data].
+        appended = []
+        offsets  = []
+        _run = [0]
+        def register(data_bytes):
+            offsets.append(_run[0])
+            _run[0] += 8 + len(data_bytes)     # 8-byte UInt64 header + payload
+            appended.append(data_bytes)
+            return offsets[-1]
 
-        # Add time/cycle stamps to vtk files
-        fid.write("FIELD FieldData 2 \n")
-        # Time meta
-        fid.write("TIME 1 1 float \n")
+        o_cycle = register(numpy.array([cycle],        dtype='<i4').tobytes())
+        o_time  = register(numpy.array([float(time)],  dtype='<f8').tobytes())
+        o_vars  = [register(self.PyMPI.ghost(variables[v].data)[sl]
+                            .ravel(order='F').astype(SCALAR_T).tobytes())
+                   for v in varList]
+        # interleaved x y z per point, i (x) fastest
+        xf = fx.ravel(order='F'); yf = fy.ravel(order='F'); zf = fz.ravel(order='F')
+        inter = numpy.empty(xf.size * 3, dtype=POINT_T)
+        inter[0::3] = xf; inter[1::3] = yf; inter[2::3] = zf
+        o_pts = register(inter.tobytes())
+
+        # write the .vts piece
+        pieceFile = dumpFile + '.vts'
+        h = []
+        h.append('<?xml version="1.0"?>')
+        h.append('<VTKFile type="StructuredGrid" version="1.0" '
+                 'byte_order="LittleEndian" header_type="UInt64">')
+        h.append('  <StructuredGrid WholeExtent="%d %d %d %d %d %d">' % pext)
+        h.append('    <FieldData>')
+        h.append('      <DataArray type="Int32" Name="CYCLE" NumberOfTuples="1" '
+                 'format="appended" offset="%d"/>' % o_cycle)
+        h.append('      <DataArray type="Float64" Name="TIME" NumberOfTuples="1" '
+                 'format="appended" offset="%d"/>' % o_time)
+        h.append('    </FieldData>')
+        h.append('    <Piece Extent="%d %d %d %d %d %d">' % pext)
+        h.append('      <PointData Scalars="%s">' % scal)
+        for v, o in zip(varList, o_vars):
+            h.append('        <DataArray type="%s" Name="%s" '
+                     'format="appended" offset="%d"/>' % (stype, v, o))
+        h.append('      </PointData>')
+        h.append('      <Points>')
+        h.append('        <DataArray type="%s" NumberOfComponents="3" '
+                 'format="appended" offset="%d"/>' % (ptype, o_pts))
+        h.append('      </Points>')
+        h.append('    </Piece>')
+        h.append('  </StructuredGrid>')
+        h.append('  <AppendedData encoding="raw">')
+        header_text = '\n'.join(h) + '\n_'
+
+        fid = open(pieceFile, 'wb')
+        fid.write(header_text.encode('ascii'))
+        for data_bytes in appended:
+            fid.write(numpy.array([len(data_bytes)], dtype='<u8').tobytes())  # header
+            fid.write(data_bytes)
+        fid.write(b'\n  </AppendedData>\n</VTKFile>\n')
         fid.close()
-        # Time in binary
-        fid = open(dumpFile + '.vtk','ab')
-        fid.write(struct.pack(">f",time))
-        fid.close()
-        # Cycle meta
-        fid = open(dumpFile + '.vtk','a')
-        fid.write("CYCLE 1 1 int \n")
-        fid.close()
-        # Cycle in binary
-        fid = open(dumpFile + '.vtk','ab')
-        fid.write(struct.pack(">i",cycle))
-        fid.close()
 
-        fid = open(dumpFile + '.vtk','a')
-        fid.write("POINTS %s float  \n" % (ax*ay*az))
+        self._writePVTS(pieceFile, dumpFile, whole, pext, varList, cycle, time,
+                        pointType=ptype, scalarType=stype)
 
-        fid.close()
-        fid = open(dumpFile + '.vtk','ab')
-        
-        for k in range(az):
-            for j in range(ay):
-                for i in range(ax):
-                    fid.write(struct.pack(">f", fx[i,j,k]))
-                    fid.write(struct.pack(">f", fy[i,j,k]))
-                    fid.write(struct.pack(">f", fz[i,j,k]))
 
-        fid.close()
+    def _writePVTS(self, pieceFile, dumpFile, whole, pext, varList, cycle, time,
+                   pointType='Float64', scalarType='Float64'):
 
-        fid = open(dumpFile + '.vtk','a')
-        fid.write("\nPOINT_DATA %s  " % (ax*ay*az) )
-        fid.close()
-        
+        src = os.path.basename(pieceFile)                       # .pvts sits beside pieces
+        pieceInfo = self.PyMPI.comm.allgather((pext, src))      # all ranks
+        if not self.PyMPI.master:
+            return
+
+        masterFile = os.path.join(os.path.dirname(dumpFile),
+                                  'pyranda.%s.pvts' % str(cycle).zfill(7))
+        scal = varList[0] if varList else ''
+
+        pid = open(masterFile, 'w')
+        pid.write('<?xml version="1.0"?>\n')
+        pid.write('<VTKFile type="PStructuredGrid" version="1.0" '
+                  'byte_order="LittleEndian">\n')
+        pid.write('  <PStructuredGrid WholeExtent="%d %d %d %d %d %d" '
+                  'GhostLevel="0">\n' % whole)
+        pid.write('    <FieldData>\n')
+        pid.write('      <DataArray type="Int32" Name="CYCLE" NumberOfTuples="1" '
+                  'format="ascii">%d</DataArray>\n' % cycle)
+        pid.write('      <DataArray type="Float64" Name="TIME" NumberOfTuples="1" '
+                  'format="ascii">%.17g</DataArray>\n' % float(time))
+        pid.write('    </FieldData>\n')
+        pid.write('    <PPointData Scalars="%s">\n' % scal)
         for var in varList:
-            fid = open(dumpFile + '.vtk','a')
-            fid.write("\nSCALARS %s float \n" % var)
-            fid.write("LOOKUP_TABLE default \n")
-            fid.close()
-            if ghost:
-                gdata = self.PyMPI.ghost( variables[var].data )
-            else:
-                gdata = variables[var].data
-            if reshape:
-                gdata = gdata.reshape( reshape, order='F')
-            fid = open(dumpFile + '.vtk','ab')
-            for k in range(az):
-                for j in range(ay):
-                    for i in range(ax):
-                        fid.write(struct.pack(">f", gdata[i,j,k]))
-            fid.close()
+            pid.write('      <PDataArray type="%s" Name="%s"/>\n' % (scalarType, var))
+        pid.write('    </PPointData>\n')
+        pid.write('    <PPoints>\n')
+        pid.write('      <PDataArray type="%s" NumberOfComponents="3"/>\n' % pointType)
+        pid.write('    </PPoints>\n')
+        for (pe, psrc) in pieceInfo:
+            pid.write('    <Piece Extent="%d %d %d %d %d %d" Source="%s"/>\n'
+                      % (pe[0], pe[1], pe[2], pe[3], pe[4], pe[5], psrc))
+        pid.write('  </PStructuredGrid>\n')
+        pid.write('</VTKFile>\n')
+        pid.close()
 
-        
+
+    def _normalize2D(self, fx, fy, fz, nn, ext_lo, ext_hi):
+
+        order = [0, 1, 2]
+        flat = [d for d in range(3) if nn[d] == 1]
+        if len(flat) == 1:
+            f = flat[0]
+            live = [d for d in range(3) if d != f]
+            order = live + [f]
+            coords = [fx, fy, fz]
+            fx = numpy.transpose(coords[live[0]], order)
+            fy = numpy.transpose(coords[live[1]], order)
+            fz = numpy.zeros_like(fx)
+        whole = (0, nn[order[0]] - 1, 0, nn[order[1]] - 1, 0, nn[order[2]] - 1)
+        pext  = (ext_lo[order[0]], ext_hi[order[0]],
+                 ext_lo[order[1]], ext_hi[order[1]],
+                 ext_lo[order[2]], ext_hi[order[2]])
+        return fx, fy, fz, whole, pext, order
+
 
     def makeDumpTec(self,mesh,variables,varList,dumpFile):
-        
+
         fx = mesh.coords[0].data[:,:,:].flatten()
         fy = mesh.coords[1].data[:,:,:].flatten()
         fz = mesh.coords[2].data[:,:,:].flatten()
-        
+
         fid = open(dumpFile + '.tec','w')
-        
+
         ax = self.PyMPI.chunk_3d_size[0]
         ay = self.PyMPI.chunk_3d_size[1]
         az = self.PyMPI.chunk_3d_size[2]
@@ -244,7 +297,7 @@ class pyrandaIO:
         for var in varList:
             fid.write(', "%s" ' % var)
         fid.write('\n')
-                
+
         fid.write("ZONE  I=%s, J=%s, K=%s, DATAPACKING=BLOCK  \n" % (ax,ay,az))
 
         # Mesh
@@ -255,13 +308,13 @@ class pyrandaIO:
         # Variables
         for var in varList:
             numpy.savetxt(fid,variables[var].data.flatten() ,fmt='%f')
-        
+
         fid.close()
 
-        
-        
+
+
     def makeMIR(self):
-        
+
 
         # Write meta file for viz
         form ="""
@@ -281,7 +334,7 @@ variables:   #NVARS#  # number of variables
   #VARS#
 timesteps:    #NVIZ#  # number of times to plot
   #CYCTIME#
-"""     
+"""
         #form = form.replace('#AX#',str(self.PyMPI.chunk_3d_size[0]))
         #form = form.replace('#AY#',str(self.PyMPI.chunk_3d_size[1]))
         #form = form.replace('#AZ#',str(self.PyMPI.chunk_3d_size[2]))
@@ -289,7 +342,7 @@ timesteps:    #NVIZ#  # number of times to plot
         #form = form.replace('#X1#',str(self.mesh.options['x1'][0]))
         #form = form.replace('#Y1#',str(self.mesh.options['x1'][1]))
         #form = form.replace('#Z1#',str(self.mesh.options['x1'][2]))
-        
+
         #form = form.replace('#DX#',str(self.dx))
         #form = form.replace('#DY#',str(self.dy))
         #form = form.replace('#DZ#',str(self.dz))
@@ -301,7 +354,7 @@ timesteps:    #NVIZ#  # number of times to plot
         #                                  self.PyMPI.min3D( self.variables[ivar].data),
         #                                  self.PyMPI.max3D( self.variables[ivar].data) )
         #form = form.replace("#VARS#",svars)
-        
+
         # Time history
         #form = form.replace("#NVIZ#",str(len( self.vizDumpHistory) ))
         #sviz = ''
@@ -313,6 +366,6 @@ timesteps:    #NVIZ#  # number of times to plot
         #    mfid = open( os.path.join( self.PyIO.rootname, 'pyranda.mir'),'w+')
         #    mfid.write(form)
         #    mfid.close()
-        
+
 
 
