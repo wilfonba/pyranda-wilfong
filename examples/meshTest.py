@@ -1,7 +1,6 @@
 import numpy
 
-# ruff :noqa (optional plotting via commented code)
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt  # noqa: F401
 
 
 def zoomMesh(npts, x1, xn, xa, xb, tt, dxc, dxf):

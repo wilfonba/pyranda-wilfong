@@ -1,14 +1,8 @@
-import re
-import sys
-import time
 import numpy
 import matplotlib.pyplot as plt
-from matplotlib import cm
-
-from pyranda import pyrandaSim, pyrandaBC, pyrandaIBM
-
-
+import pdb
 import matplotlib
+from pyranda import pyrandaSim, pyrandaBC, pyrandaIBM
 
 
 def move_figure(f, x, y):
@@ -189,8 +183,6 @@ viz_freq = 30
 pvar = "rhoA"
 viz = True
 
-import pdb
-
 pdb.set_trace()
 
 
@@ -255,8 +247,7 @@ while tt > time:
     cnt += 1
     if viz:
         if (ss.PyMPI.master and (cnt % viz_freq == 0)) and True:
-            # ruff :noqa (marked as undefined?)
-            poo = raw_input("fff")
+            poo = raw_input("fff")  # noqa: F821 (marked as undefined)
             updatePlots()
 
 

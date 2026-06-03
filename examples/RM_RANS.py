@@ -339,5 +339,4 @@ while time < tstop:
 
             plt.pause(0.001)
 
-            # ruff :noqa (raw_input marked as undefined)
-            raw_input("Poop")
+            raw_input("Poop")  # noqa: F821 (marked as undefined)
