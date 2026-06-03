@@ -4,12 +4,11 @@ taylorgreen -- 1.00106718415
 """
 
 # Update dictionary of baseline scalars
-dbase.update( baseDict( baselines) )
+dbase.update(baseDict(baselines))
 
-script = 'examples/TaylorGreen.py'
+script = "examples/TaylorGreen.py"
 
-test = testObj('taylorgreen')
+test = testObj("taylorgreen")
 test.script = script
-test.args = ['32','1']
-tests.append( test )
-
+test.args = ["32", "1"]
+tests.append(test)

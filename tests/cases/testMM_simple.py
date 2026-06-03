@@ -9,39 +9,35 @@ MM-adv1d-200 -- 1.0
 """
 
 # Update dictionary of baseline scalars
-dbase.update( baseDict( baselines) )
+dbase.update(baseDict(baselines))
 
-test = testObj('MM-adv1d-50-d')
-test.script = 'examples/interface.py'
-test.args = ['50','1','1']
-tests.append( test )
+test = testObj("MM-adv1d-50-d")
+test.script = "examples/interface.py"
+test.args = ["50", "1", "1"]
+tests.append(test)
 
-test = testObj('MM-adv1d-100-d')
-test.script = 'examples/interface.py'
-test.args = ['100','1','1']
-tests.append( test )
+test = testObj("MM-adv1d-100-d")
+test.script = "examples/interface.py"
+test.args = ["100", "1", "1"]
+tests.append(test)
 
-test = testObj('MM-adv1d-200-d')
-test.script = 'examples/interface.py'
-test.args = ['200','1','1']
-tests.append( test )
-
-
+test = testObj("MM-adv1d-200-d")
+test.script = "examples/interface.py"
+test.args = ["200", "1", "1"]
+tests.append(test)
 
 
-test = testObj('MM-adv1d-50')
-test.script = 'examples/interface.py'
-test.args = ['50','1','0']
-tests.append( test )
+test = testObj("MM-adv1d-50")
+test.script = "examples/interface.py"
+test.args = ["50", "1", "0"]
+tests.append(test)
 
-test = testObj('MM-adv1d-100')
-test.script = 'examples/interface.py'
-test.args = ['100','1','0']
-tests.append( test )
+test = testObj("MM-adv1d-100")
+test.script = "examples/interface.py"
+test.args = ["100", "1", "0"]
+tests.append(test)
 
-test = testObj('MM-adv1d-200')
-test.script = 'examples/interface.py'
-test.args = ['200','1','0']
-tests.append( test )
-
-
+test = testObj("MM-adv1d-200")
+test.script = "examples/interface.py"
+test.args = ["200", "1", "0"]
+tests.append(test)

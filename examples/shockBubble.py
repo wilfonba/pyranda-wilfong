@@ -1,7 +1,7 @@
 from pyranda import pyrandaSim, pyrandaBC, pyrandaTimestep
 import numpy as np
 
-name = 'shockbubble'
+name = "shockbubble"
 
 # Fluid and ambient properties
 rhoA = 0.138
@@ -10,10 +10,10 @@ gammaA = 1.67
 gammaB = 1.4
 mwA = 0.138
 mwB = 1.0
-p0 = 1.0   # Ambient pressure
-Ma = 1.2   # Shock Mach number
-st = 10    # smearing thickness in cells
-eps = 1e-8 # Epsilon to avoid dividing by zero
+p0 = 1.0  # Ambient pressure
+Ma = 1.2  # Shock Mach number
+st = 10  # smearing thickness in cells
+eps = 1e-8  # Epsilon to avoid dividing by zero
 
 # Domain parameters
 xl = -2.0
@@ -26,7 +26,7 @@ Ny = 400
 # Bubble parameters
 r0 = 25.0 / 89.0
 bx0 = -0.5
-by0 =  0.0
+by0 = 0.0
 
 # Shock location
 x0_shock = -1.0
@@ -34,10 +34,10 @@ x0_shock = -1.0
 # Calculate normal shock relations
 a0 = float(np.sqrt(gammaB * p0 / rhoB))
 p_shock = p0 * (2.0 * gammaB * Ma**2.0 - (gammaB - 1.0)) / (gammaB + 1.0)
-rho_shock = rhoB * (gammaB + 1.0) * Ma**2.0 / ((gammaB - 1.0)*Ma**2.0 + 2.0)
+rho_shock = rhoB * (gammaB + 1.0) * Ma**2.0 / ((gammaB - 1.0) * Ma**2.0 + 2.0)
 u_shock = a0 * (2.0 / (gammaB + 1.0)) * (Ma - 1.0 / Ma)
 igammaB = 1.0 / (gammaB - 1.0)
-Et_shock = p_shock*igammaB + 0.5*rho_shock*u_shock**2
+Et_shock = p_shock * igammaB + 0.5 * rho_shock * u_shock**2
 
 print("p_shock = ", p_shock)
 print("rho_shock = ", rho_shock)
@@ -45,19 +45,19 @@ print("u_shock = ", u_shock)
 
 # Define the mesh
 mesh_options = {}
-mesh_options['dim'] = 2
-mesh_options['x1'] = [xl, yl, 0.0] # Left/Bottom/Back
-mesh_options['xn'] = [xh, yh, 1.0] # Right/Top/Front
-mesh_options['nn'] = [Nx, Ny, 1]  # Nx/Ny/Nz
-mesh_options['periodic'] = [False, False, False]
+mesh_options["dim"] = 2
+mesh_options["x1"] = [xl, yl, 0.0]  # Left/Bottom/Back
+mesh_options["xn"] = [xh, yh, 1.0]  # Right/Top/Front
+mesh_options["nn"] = [Nx, Ny, 1]  # Nx/Ny/Nz
+mesh_options["periodic"] = [False, False, False]
 
-dx = (xh - xl)/Nx
+dx = (xh - xl) / Nx
 
 # Initialize the pyranda sim with the mesh options
 ss = pyrandaSim(name, mesh_options)
 
 # Add packages to simulation object
-ss.addPackage(pyrandaBC(ss))        # Allows for bc.* functions
+ss.addPackage(pyrandaBC(ss))  # Allows for bc.* functions
 ss.addPackage(pyrandaTimestep(ss))  # Allows for "dt.*" functions
 
 eom = f"""
@@ -124,13 +124,13 @@ bc.extrap(['rhoYA','rhoYB','rhou','rhov','Et'], ['xn','y1','yn'])
 """
 
 EOMDict = {}
-EOMDict['mwA'] = mwA
-EOMDict['mwB'] = mwB
-EOMDict['gammaA'] = gammaA
-EOMDict['gammaB'] = gammaB
-EOMDict['rho_shock'] = rho_shock
-EOMDict['u_shock'] = u_shock
-EOMDict['Et_shock'] = Et_shock
+EOMDict["mwA"] = mwA
+EOMDict["mwB"] = mwB
+EOMDict["gammaA"] = gammaA
+EOMDict["gammaB"] = gammaB
+EOMDict["rho_shock"] = rho_shock
+EOMDict["u_shock"] = u_shock
+EOMDict["Et_shock"] = Et_shock
 
 # Add the EOM to the solver
 ss.EOM(eom, EOMDict)
@@ -169,61 +169,64 @@ s2 = (1 - 2*eps) * (0.5 * (1.0 - tanh( (r - Vr0) / (Vst*Vdx) ))) + eps
 """
 
 icDict = {}
-icDict['Vx0_shock'] = x0_shock
-icDict['Vu_shock'] = u_shock
-icDict['Vp_shock'] = p_shock
-icDict['Vrho_shock'] = rho_shock
-icDict['Vp0'] = p0
-icDict['Vst'] = st
-icDict['Vdx'] = dx
-icDict['Vr0'] = r0
-icDict['VrhoA'] = rhoA
-icDict['VrhoB'] = rhoB
-icDict['Vbx0'] = bx0
-icDict['Vby0'] = by0
-icDict['VmwA'] = mwA
-icDict['VmwB'] = mwB
-icDict['VgammaA'] = gammaA
-icDict['VgammaB'] = gammaB
-icDict['eps'] = eps
+icDict["Vx0_shock"] = x0_shock
+icDict["Vu_shock"] = u_shock
+icDict["Vp_shock"] = p_shock
+icDict["Vrho_shock"] = rho_shock
+icDict["Vp0"] = p0
+icDict["Vst"] = st
+icDict["Vdx"] = dx
+icDict["Vr0"] = r0
+icDict["VrhoA"] = rhoA
+icDict["VrhoB"] = rhoB
+icDict["Vbx0"] = bx0
+icDict["Vby0"] = by0
+icDict["VmwA"] = mwA
+icDict["VmwB"] = mwB
+icDict["VgammaA"] = gammaA
+icDict["VgammaB"] = gammaB
+icDict["eps"] = eps
 
 # Set the initial condition
 ss.setIC(ic, icDict)
 
-time = 0.0 # Start time
-tt = 3.0   # Stop time
-out_vars = ['YA','rhoYA','rhoYB','u','v','p']
+time = 0.0  # Start time
+tt = 3.0  # Stop time
+out_vars = ["YA", "rhoYA", "rhoYB", "u", "v", "p"]
 
 # Start time loop
 dump_freq = 200
 CFL = 1.0
-dt = ss.variables['dt'].data * CFL*.8
+dt = ss.variables["dt"].data * CFL * 0.8
 
 viz_freq = tt / 200.0
 viz_dump = viz_freq
 
+
 def myIO():
     ss.write(out_vars)
 
+
 myIO()
 
-while time < tt :
-
+while time < tt:
     # Update the EOM and get next dt
-    time = ss.rk4(time,dt)
-    dt = min( ss.variables['dt'].data * CFL, dt*1.1)
-    dt = min(dt, (tt - time) )
+    time = ss.rk4(time, dt)
+    dt = min(ss.variables["dt"].data * CFL, dt * 1.1)
+    dt = min(dt, (tt - time))
 
-    ss.iprint("(%.2f%%) Cycle: %5d --- Time: %10.4e --- deltat: %10.4e" % (100*time/tt,ss.cycle,time,dt)  )
+    ss.iprint(
+        "(%.2f%%) Cycle: %5d --- Time: %10.4e --- deltat: %10.4e"
+        % (100 * time / tt, ss.cycle, time, dt)
+    )
 
     # Constant time
     if time > viz_dump:
         viz_dump += viz_freq
         myIO()
 
-    if (ss.cycle%dump_freq == 0) :
+    if ss.cycle % dump_freq == 0:
         ss.writeRestart()
 
 myIO()
 ss.writeRestart()
-

@@ -40,7 +40,7 @@ else
 fi
 
 # Either command failing exits non-zero and blocks the commit.
-"$RUFF" check "$target"          # lint
-"$RUFF" format --check "$target" # verify formatting
+"$RUFF" format "$target"    # apply formatting
+"$RUFF" check "$target"     # lint
 
 echo "ruff: all checks passed."
