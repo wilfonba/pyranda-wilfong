@@ -188,7 +188,7 @@ icDict['VgammaB'] = gammaB
 icDict['eps'] = eps
 
 # Set the initial condition
-ss.setIC(ic, icDict, verbose=True)
+ss.setIC(ic, icDict)
 
 time = 0.0 # Start time
 tt = 3.0   # Stop time
