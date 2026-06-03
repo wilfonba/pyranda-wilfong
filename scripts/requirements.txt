@@ -1,0 +1,7 @@
+matplotlib
+numpy
+scipy
+mpi4py
+wheel
+setuptools
+ruff==0.15.14
