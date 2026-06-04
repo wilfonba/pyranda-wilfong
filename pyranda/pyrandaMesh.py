@@ -20,7 +20,7 @@ class pyrandaMesh:
         self.name = 'base'
         #self.kind = None #mesh_options['type']
         self.options = {} #None #mesh_options
-        self.dims = 0 #mesh_options['dim']
+        self.dim = 0 #mesh_options['dim']
         self.PyMPI = None
         self.x = None
         self.y = None
@@ -48,7 +48,52 @@ class pyrandaMesh:
         self.options['xn'][ind] = xn 
         self.options['nn'][ind] = nn
         self.options['periodic'][ind] = periodic 
-        
+
+    def validate(self):
+        o = self.options
+
+        # Dimension / coordinate system
+        if o['dim'] not in {1, 2, 3}:
+            raise ValueError("mesh_options['dim'] must be in {1, 2, 3}")
+        if o['coordsys'] not in {0, 1, 2, 3, 4}:
+            raise ValueError("mesh_options['coordsys'] must be in {0, 1, 2, 3, 4}")
+        if not isinstance(o['periodicGrid'], bool):
+            raise ValueError(f"mesh_options['periodicGrid'] must be a bool, got {type(o['periodicGrid'])}")
+
+        # Decomposition: all-or-nothing
+        pn = o['pn']
+        if any(p > 0 for p in pn) and not all(p > 0 for p in pn):
+            raise ValueError("All elements of mesh_options['pn'] must be defined if any are defined")
+
+        for d in range(3):
+            # Mesh points
+            if not isinstance(o['nn'][d], int) or isinstance(o['nn'][d], bool):
+                raise ValueError(f"mesh_options['nn'][{d}] must be an integer, got {type(o['nn'][d])}")
+            if o['nn'][d] <= 0:
+                raise ValueError(f"mesh_options['nn'][{d}] must be greater than zero")
+
+            # Domain bounds (equal bounds only valid for a singleton dimension)
+            if o['nn'][d] > 1 and o['xn'][d] <= o['x1'][d]:
+                raise ValueError(f"mesh_options['xn'][{d}] must be greater than mesh_options['x1'][{d}]")
+
+            # Decomposition
+            if not isinstance(o['pn'][d], int) or isinstance(o['pn'][d], bool):
+                raise ValueError(f"mesh_options['pn'][{d}] must be an integer, got {type(o['pn'][d])}")
+            if o['pn'][d] < 0:
+                raise ValueError(f"mesh_options['pn'][{d}] must not be negative")
+
+            # Boundary conditions
+            if not isinstance(o['periodic'][d], bool):
+                print(o['periodic'])
+                raise ValueError(f"mesh_options['periodic'][{d}] must be a bool, got {type(o['periodic'][d])}")
+            for b in range(2):
+                if not isinstance(o['symmetric'][d][b], bool):
+                    raise ValueError(f"mesh_options['symmetric'][{d}][{b}] must be a bool, got {type(o['symmetric'][d][b])}")
+
+            # Cross-check: a dimension can't be both periodic and symmetric
+            if o['periodic'][d] and any(o['symmetric'][d]):
+                raise ValueError(f"mesh_options dimension {d} cannot be both periodic and symmetric")
+
     def get_sMap(self):
         sMap = {}
         sMap['xdom=('] = "self.set_options(0,"

@@ -48,6 +48,7 @@ class pyrandaSim:
         meshOptions =      defMeshOptions
         self.meshOptions = defMeshOptions
         self.mesh.options =defMeshOptions 
+        self.mesh.validate()
 
         if 'coordsys' in meshOptions:
             self.mesh.coordsys = meshOptions['coordsys']
@@ -239,7 +240,7 @@ class pyrandaSim:
         # Apply a dictionary to the string
         if eomDict:
             eom = self.updateStringFromDictionary( eom, eomDict, "EOM")
-        
+
         self.eom = eom
         
         # Split up the equation lines
