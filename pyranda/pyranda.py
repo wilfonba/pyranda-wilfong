@@ -11,8 +11,7 @@
 from __future__ import print_function
 from mpi4py import MPI
 import numpy
-import sys
-import os
+import sys, os
 import time
 import random
 import glob
@@ -223,7 +222,7 @@ class pyrandaSim:
                 )
 
         return string
-
+         
     def EOM(self, eom, eomDict=False):
         """
         Higher level wrapper to make equations of motion from a single string
@@ -279,6 +278,9 @@ class pyrandaSim:
         self.variables["meshz"] = self.mesh.coords[2]
 
     def checkForNan(self, names=[]):
+
+
+
 
         svars = ""
         if not names:
