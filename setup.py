@@ -303,16 +303,16 @@ class LintPyranda(Command):
             sys.exit(1)
 
         # Locate ruff inside the project venv (Linux/macOS and Windows git-bash).
-        posix_ruff = os.path.join(".venv", "bin", "ruff")
-        windows_ruff = os.path.join(".venv", "Scripts", "ruff.exe")
+        posix_ruff = os.path.join("myEnv", "bin", "ruff")
+        windows_ruff = os.path.join("myEnv", "Scripts", "ruff.exe")
         if os.access(posix_ruff, os.X_OK):
             ruff = posix_ruff
         elif os.access(windows_ruff, os.X_OK):
             ruff = windows_ruff
         else:
-            print("error: ruff not found in .venv", file=sys.stderr)
+            print("error: ruff not found in myVenv", file=sys.stderr)
             print("  Set up the environment first:", file=sys.stderr)
-            print("    python -m venv .venv", file=sys.stderr)
+            print("    python -m venv myEnv", file=sys.stderr)
             print("    .venv/bin/pip install -r requirements.txt", file=sys.stderr)
             sys.exit(1)
 
